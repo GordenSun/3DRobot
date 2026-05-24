@@ -286,33 +286,62 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// ====== 自适应 ======
-// 机器人真实高度 ~ 1.95（脚到头），target 设在中心 1.05。
-// HUD 底部动作面板 + 顶部品牌区会占掉一部分屏幕空间，所以世界视野要预留余量。
-// 这里把"需框入的世界高度"放大到 3.0，再按屏宽再次保险，确保竖屏/带 HUD 时全身仍然可见。
-const ROBOT_FRAME_HEIGHT = 3.0;
+// ====== 自适应取景 ======
+// 思路：把 HUD（顶部品牌/规格、左下动作面板、右下状态面板）真实占用的像素
+// 转成世界坐标里的"裕度"，让脚正好在底部 HUD 上沿之上、头顶在顶部 HUD 下沿之下。
+// 这样无论桌面/竖屏都能保证「全身可见 + 不被遮挡」。
+const ROBOT_TOP_Y    = 1.95;   // 机器人头顶世界 y
+const ROBOT_BOTTOM_Y = 0.0;    // 机器人脚底世界 y
+const ROBOT_WIDTH    = 0.85;   // 含舞蹈/挥手时手臂展开的最大宽度
+const PAD_PX         = 24;     // 额外内边距，避免贴边
+
 function fitCameraToRobot() {
   const aspect = camera.aspect;
   const vFov = THREE.MathUtils.degToRad(camera.fov);
 
-  // 估算屏幕被 HUD 遮挡后的"安全垂直比例"
-  // 底部面板 ~ 200 px、顶部 brand ~ 80 px，做一个粗略动态比例
+  const w = window.innerWidth;
   const h = window.innerHeight;
-  const safeRatio = Math.max(0.55, (h - 280) / h);
-  // 想让机器人占满安全区 -> 世界视野要等比放大
-  const frameH = ROBOT_FRAME_HEIGHT / safeRatio;
 
-  // 垂直方向需要的距离
+  // HUD 占用估计（与 index.html 中 CSS 实际值保持一致）
+  const topHud    = 130 + PAD_PX;
+  const bottomHud = (w < 720)
+    ? 110 + PAD_PX                // 移动端：状态面板覆盖底部
+    : 320 + PAD_PX;               // 桌面端：动作面板 + 状态面板高度上限
+
+  // 可见安全区比例
+  const safeFracV = Math.max(0.35, (h - topHud - bottomHud) / h);
+
+  // 让安全区恰好"装下"机器人 → 世界垂直视野高度
+  const robotH = ROBOT_TOP_Y - ROBOT_BOTTOM_Y;
+  const frameH = robotH / safeFracV;
+
+  // 让屏幕顶部 topHud 处对应世界 y = ROBOT_TOP_Y
+  //   yMax = ROBOT_TOP_Y + frameH * (topHud / h)
+  const yMax = ROBOT_TOP_Y + frameH * (topHud / h);
+  const yMin = yMax - frameH;
+  const targetY = (yMax + yMin) / 2;
+
+  // 距离：取垂直方向与水平方向中较远者
   const distV = (frameH / 2) / Math.tan(vFov / 2);
-  // 水平方向（竖屏 / 窄屏）
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-  const distH = (ROBOT_FRAME_HEIGHT * 0.45) / Math.tan(hFov / 2);
-  const dist = Math.max(distV, distH) * 1.04;
+  const distH = (ROBOT_WIDTH / 2) / Math.tan(hFov / 2);
+  const dist = Math.max(distV, distH);
 
-  // 保留当前观察方向，只调整距离
-  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  // 更新 target（横向保持 0）
+  controls.target.set(0, targetY, 0);
+
+  // 保留当前观察方向（不破坏用户拖动后的视角），只调整距离
+  let dir = new THREE.Vector3().subVectors(camera.position, controls.target);
+  if (dir.lengthSq() < 1e-4) dir.set(0.3, 0.05, 1);
+  dir.normalize();
   camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+
+  // 动态放宽 minDistance，避免 fitting 后超过约束
+  controls.minDistance = Math.min(controls.minDistance, dist * 0.95);
+  controls.maxDistance = Math.max(controls.maxDistance, dist * 1.6);
+
   camera.updateProjectionMatrix();
+  controls.update();
 }
 
 function onResize() {
