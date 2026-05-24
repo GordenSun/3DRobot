@@ -41,8 +41,9 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   100
 );
-camera.position.set(2.6, 1.55, 6.4);
-camera.lookAt(0, 1.05, 0);
+// 初始方向偏正前方一点，让机器人在屏幕视觉上更"正"
+camera.position.set(1.2, 1.5, 7.0);
+camera.lookAt(0, 1.0, 0);
 
 // ====== 控制器 ======
 const controls = new OrbitControls(camera, canvas);
@@ -287,13 +288,15 @@ function animate() {
 }
 
 // ====== 自适应取景 ======
-// 思路：把 HUD（顶部品牌/规格、左下动作面板、右下状态面板）真实占用的像素
-// 转成世界坐标里的"裕度"，让脚正好在底部 HUD 上沿之上、头顶在顶部 HUD 下沿之下。
-// 这样无论桌面/竖屏都能保证「全身可见 + 不被遮挡」。
-const ROBOT_TOP_Y    = 1.95;   // 机器人头顶世界 y
-const ROBOT_BOTTOM_Y = 0.0;    // 机器人脚底世界 y
-const ROBOT_WIDTH    = 0.85;   // 含舞蹈/挥手时手臂展开的最大宽度
-const PAD_PX         = 24;     // 额外内边距，避免贴边
+// 关键改进：用「像素 ↔ 世界 y」的精确反推，直接指定机器人头/脚出现在屏幕的具体像素位置
+// （顶部 HUD 下方 + safeMargin、底部 HUD 上方 + safeMargin），完全避免 HUD 遮挡。
+// 公式推导：
+//   y_screen = h * (yMax - y_world) / frameH
+//   令 head(1.95) 落在 topHud + safeMargin 处，foot(0) 落在 h - bottomHud - safeMargin 处，
+//   两式相减解出 frameH，再代入解 yMax / targetY。
+const ROBOT_HEAD_Y   = 1.95;     // 头顶世界 y
+const ROBOT_FOOT_Y   = 0.0;      // 脚底世界 y
+const ROBOT_WIDTH    = 0.95;     // 舞蹈/挥手时手臂展开的最大水平宽度
 
 function fitCameraToRobot() {
   const aspect = camera.aspect;
@@ -302,43 +305,43 @@ function fitCameraToRobot() {
   const w = window.innerWidth;
   const h = window.innerHeight;
 
-  // HUD 占用估计（与 index.html 中 CSS 实际值保持一致）
-  const topHud    = 130 + PAD_PX;
-  const bottomHud = (w < 720)
-    ? 110 + PAD_PX                // 移动端：状态面板覆盖底部
-    : 320 + PAD_PX;               // 桌面端：动作面板 + 状态面板高度上限
+  // 与 CSS 实际渲染保持一致的 HUD 占位（含 padding 与 bottom: 30）
+  const topHud    = 150;                       // brand + specs 区
+  const bottomHud = (w < 720) ? 220 : 340;     // 桌面动作面板更高
+  const safeMargin = 28;                        // 与 HUD 之间的视觉间距
 
-  // 可见安全区比例
-  const safeFracV = Math.max(0.35, (h - topHud - bottomHud) / h);
+  const yFootScreen = h - bottomHud - safeMargin;   // 脚应该落在的像素 y
+  const yHeadScreen = topHud + safeMargin;           // 头应该落在的像素 y
+  const robotH = ROBOT_HEAD_Y - ROBOT_FOOT_Y;        // 1.95
 
-  // 让安全区恰好"装下"机器人 → 世界垂直视野高度
-  const robotH = ROBOT_TOP_Y - ROBOT_BOTTOM_Y;
-  const frameH = robotH / safeFracV;
+  // 1) 安全垂直空间（像素），最小值 120 防止极端窄屏除零
+  const safePx = Math.max(120, yFootScreen - yHeadScreen);
 
-  // 让屏幕顶部 topHud 处对应世界 y = ROBOT_TOP_Y
-  //   yMax = ROBOT_TOP_Y + frameH * (topHud / h)
-  const yMax = ROBOT_TOP_Y + frameH * (topHud / h);
+  // 2) 世界视野高度 frameH：让 robotH 占满 safePx 这段像素
+  const frameH = robotH * h / safePx;
+
+  // 3) yMax（屏幕 y=0 对应的世界 y）
+  const yMax = ROBOT_HEAD_Y + frameH * yHeadScreen / h;
   const yMin = yMax - frameH;
   const targetY = (yMax + yMin) / 2;
 
-  // 距离：取垂直方向与水平方向中较远者
+  // 4) 距离：垂直 / 水平取较大者，保证手臂展开时也不裁切
   const distV = (frameH / 2) / Math.tan(vFov / 2);
-  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+  const hFov  = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
   const distH = (ROBOT_WIDTH / 2) / Math.tan(hFov / 2);
-  const dist = Math.max(distV, distH);
+  const dist  = Math.max(distV, distH);
 
-  // 更新 target（横向保持 0）
+  // 5) 写入 target & 沿当前方向重定相机
   controls.target.set(0, targetY, 0);
 
-  // 保留当前观察方向（不破坏用户拖动后的视角），只调整距离
   let dir = new THREE.Vector3().subVectors(camera.position, controls.target);
   if (dir.lengthSq() < 1e-4) dir.set(0.3, 0.05, 1);
   dir.normalize();
   camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
 
-  // 动态放宽 minDistance，避免 fitting 后超过约束
-  controls.minDistance = Math.min(controls.minDistance, dist * 0.95);
-  controls.maxDistance = Math.max(controls.maxDistance, dist * 1.6);
+  // 放宽距离约束，避免被旧的 min/max 钳制
+  controls.minDistance = Math.min(2.0, dist * 0.7);
+  controls.maxDistance = Math.max(20, dist * 2.0);
 
   camera.updateProjectionMatrix();
   controls.update();
