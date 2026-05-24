@@ -595,9 +595,11 @@ export function createRobot() {
     }
   }
 
-  // 让手臂自然下垂（默认 A-pose 略外展，更自然的 T-pose 修正）
-  leftArm.upperArm.rotation.z = 0.08;
-  rightArm.upperArm.rotation.z = -0.08;
+  // 手臂自然下垂（A-pose 略外展）
+  // 坐标说明：upperArm 默认朝 -Y。绕 Z 旋转 θ 后方向为 (sinθ, -cosθ, 0)。
+  // 因此：左臂(x=-0.26)要"外展"(末端朝 -X)，需 z<0；右臂(x=+0.26)要"外展"需 z>0。
+  leftArm.upperArm.rotation.z = -0.08;
+  rightArm.upperArm.rotation.z = 0.08;
   leftArm.upperArm.userData.defaultRotation = leftArm.upperArm.rotation.clone();
   rightArm.upperArm.userData.defaultRotation = rightArm.upperArm.rotation.clone();
 
