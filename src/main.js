@@ -34,22 +34,23 @@ scene.background = new THREE.Color(0x05080d);
 scene.fog = new THREE.Fog(0x05080d, 6, 22);
 
 // ====== 相机 ======
+// 拉远 + fov 调整，确保整个 1.75 m 的机器人在画面中央且全身可见
 const camera = new THREE.PerspectiveCamera(
-  38,
+  36,
   window.innerWidth / window.innerHeight,
   0.1,
   100
 );
-camera.position.set(2.4, 1.4, 3.6);
-camera.lookAt(0, 1.0, 0);
+camera.position.set(2.6, 1.55, 6.4);
+camera.lookAt(0, 1.05, 0);
 
 // ====== 控制器 ======
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 1.0, 0);
+controls.target.set(0, 1.05, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 1.6;
-controls.maxDistance = 8;
+controls.minDistance = 2.2;
+controls.maxDistance = 10;
 controls.maxPolarAngle = Math.PI * 0.52;
 controls.minPolarAngle = Math.PI * 0.15;
 controls.autoRotate = false;
@@ -286,14 +287,44 @@ function animate() {
 }
 
 // ====== 自适应 ======
+// 机器人真实高度 ~ 1.95（脚到头），target 设在中心 1.05。
+// HUD 底部动作面板 + 顶部品牌区会占掉一部分屏幕空间，所以世界视野要预留余量。
+// 这里把"需框入的世界高度"放大到 3.0，再按屏宽再次保险，确保竖屏/带 HUD 时全身仍然可见。
+const ROBOT_FRAME_HEIGHT = 3.0;
+function fitCameraToRobot() {
+  const aspect = camera.aspect;
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+
+  // 估算屏幕被 HUD 遮挡后的"安全垂直比例"
+  // 底部面板 ~ 200 px、顶部 brand ~ 80 px，做一个粗略动态比例
+  const h = window.innerHeight;
+  const safeRatio = Math.max(0.55, (h - 280) / h);
+  // 想让机器人占满安全区 -> 世界视野要等比放大
+  const frameH = ROBOT_FRAME_HEIGHT / safeRatio;
+
+  // 垂直方向需要的距离
+  const distV = (frameH / 2) / Math.tan(vFov / 2);
+  // 水平方向（竖屏 / 窄屏）
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+  const distH = (ROBOT_FRAME_HEIGHT * 0.45) / Math.tan(hFov / 2);
+  const dist = Math.max(distV, distH) * 1.04;
+
+  // 保留当前观察方向，只调整距离
+  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+  camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+  camera.updateProjectionMatrix();
+}
+
 function onResize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
+  fitCameraToRobot();
 }
 window.addEventListener('resize', onResize);
+fitCameraToRobot();
 
 // 启动
 animate();

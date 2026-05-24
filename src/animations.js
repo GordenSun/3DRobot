@@ -64,21 +64,49 @@ function idle(joints, t) {
 }
 
 // 2. WAVE 挥手（右手）
+//   姿态：右臂高举过头，肘略弯，前臂自然指向斜上方；
+//   动态：上臂在举起的姿势上做小幅 z 摇摆，前臂同相加大摇摆，腕部跟随；
+//   重心：身体微微向左让出空间、转头看观众、左臂自然下垂。
 function wave(joints, t) {
-  idle(joints, t * 0.8); // 基础呼吸
-  // 抬起右臂
-  set(joints.rightUpperArm, -0.2, 0, -1.9); // 抬手举到头侧
-  set(joints.rightElbow, 0, 0, 0);
-  // 前臂向上
-  set(joints.rightForeArm, 0, 0, -0.6);
-  // 挥动 — 通过手腕来回摆动
-  const wag = sin(t, 5.5) * 0.6;
-  set(joints.rightWrist, 0, 0, wag);
-  set(joints.rightHand, 0, 0, 0);
+  // 基础呼吸（半幅，避免和挥动叠在一起显得太抖）
+  const breath = sin(t, 1.4) * 0.012;
+  setPos(joints.pelvis, 0, breath, 0);
 
-  // 头微微转向挥手侧
-  set(joints.head, 0, -0.15 + sin(t, 0.5) * 0.04, 0);
-  set(joints.chest, 0, -0.08, 0.05);
+  // 身体：稍微转向观众侧，头略仰、转头
+  set(joints.spine,  -0.04, -0.10, 0);
+  set(joints.chest,   0.02, -0.10, 0.04);
+  set(joints.neck,   -0.05,  0.00, 0);
+  set(joints.head,   -0.10, -0.20 + sin(t, 0.8) * 0.04, 0);
+
+  // 重心略偏到左腿（挥手时身体自然倾斜的细节）
+  set(joints.leftThigh,  0.00, 0,  0.04);
+  set(joints.rightThigh, 0.00, 0, -0.06);
+  set(joints.leftKnee,   0.05, 0, 0);
+  set(joints.rightKnee,  0.12, 0, 0);
+  set(joints.leftAnkle, -0.03, 0, 0);
+
+  // 左臂：自然下垂带轻微随节奏摆动
+  const idleSwing = sin(t, 1.2) * 0.05;
+  set(joints.leftUpperArm,  idleSwing, 0, 0.04);
+  set(joints.leftElbow,     0.18, 0, 0);
+  set(joints.leftWrist,     0, 0, 0);
+
+  // 右臂：举起挥手
+  //   节奏：每秒约 1.6 次完整往返
+  const freq = 10.0;        // 摇摆频率
+  const swing = sin(t * freq) * 0.30;          // 上臂横向小摇
+  const swingFore = sin(t * freq + 0.5) * 0.45; // 前臂跟随主摆动（同相、加幅）
+  const swingWrist = sin(t * freq + 0.8) * 0.25;
+
+  // 上臂：举到接近垂直向上（z ≈ -2.55 rad ≈ -146°），略前倾
+  set(joints.rightUpperArm, 0.20, -0.10, -2.55 + swing);
+  // 肘弯一点，让前臂自然斜向头顶
+  set(joints.rightElbow, -0.35, 0, 0);
+  // 前臂沿掌心面摇摆（核心挥动）
+  set(joints.rightForeArm, 0, 0, swingFore);
+  // 腕部跟随，加点活力
+  set(joints.rightWrist, 0, swingWrist * 0.4, swingWrist);
+  set(joints.rightHand, 0, 0, 0);
 }
 
 // 3. WALK 行走（原地踏步）
@@ -279,52 +307,6 @@ function dance(joints, t) {
   set(joints.rightKnee, Math.max(0.1, -sin(beat) * 0.4 + 0.3), 0, 0);
 }
 
-// 8. POWER 战斗起势（蓄力姿势）
-function power(joints, t) {
-  // 静态战斗姿势，加微小颤动表现能量
-  const sh = sin(t, 14) * 0.015;
-
-  setPos(joints.pelvis, sh, -0.1 + sh, 0);
-  set(joints.spine, 0.15, 0, 0);
-  set(joints.chest, -0.05, 0, 0);
-  set(joints.head, -0.15, sin(t, 0.6) * 0.05, 0);
-
-  // 双臂下垂内拳头紧握，肘弯
-  set(joints.leftUpperArm, -0.5, 0, 0.45);
-  set(joints.rightUpperArm, -0.5, 0, -0.45);
-  set(joints.leftElbow, 1.6, 0, 0);
-  set(joints.rightElbow, 1.6, 0, 0);
-  set(joints.leftHand, 0, 0, 0);
-  set(joints.rightHand, 0, 0, 0);
-
-  // 马步
-  set(joints.leftThigh, 0.1, 0, 0.3);
-  set(joints.rightThigh, 0.1, 0, -0.3);
-  set(joints.leftKnee, 0.9, 0, 0);
-  set(joints.rightKnee, 0.9, 0, 0);
-  set(joints.leftAnkle, -0.4, 0, 0);
-  set(joints.rightAnkle, -0.4, 0, 0);
-}
-
-// 9. T-POSE / SCAN：扫描展示姿态（双臂水平展开 + 旋转展示）
-function scan(joints, t) {
-  // 缓慢呼吸
-  setPos(joints.pelvis, 0, sin(t, 1.0) * 0.02, 0);
-  set(joints.head, sin(t, 1.2) * 0.05, 0, 0);
-
-  // 双臂水平
-  set(joints.leftUpperArm, 0, 0, 1.5);
-  set(joints.rightUpperArm, 0, 0, -1.5);
-  set(joints.leftElbow, 0, 0, 0);
-  set(joints.rightElbow, 0, 0, 0);
-
-  // 站立
-  set(joints.leftThigh, 0, 0, 0.05);
-  set(joints.rightThigh, 0, 0, -0.05);
-  set(joints.leftKnee, 0, 0, 0);
-  set(joints.rightKnee, 0, 0, 0);
-}
-
 export const ANIMATIONS = {
   idle:  { label: 'IDLE',   cn: '待机',   fn: idle },
   wave:  { label: 'WAVE',   cn: '挥手',   fn: wave },
@@ -332,9 +314,7 @@ export const ANIMATIONS = {
   run:   { label: 'RUN',    cn: '奔跑',   fn: run  },
   punch: { label: 'PUNCH',  cn: '出拳',   fn: punch},
   jump:  { label: 'JUMP',   cn: '跳跃',   fn: jump },
-  dance: { label: 'DANCE',  cn: '舞蹈',   fn: dance},
-  power: { label: 'POWER',  cn: '蓄力',   fn: power},
-  scan:  { label: 'SCAN',   cn: '扫描',   fn: scan }
+  dance: { label: 'DANCE',  cn: '舞蹈',   fn: dance}
 };
 
 export const ANIMATION_KEYS = Object.keys(ANIMATIONS);
