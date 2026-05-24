@@ -21,7 +21,10 @@ const renderer = new THREE.WebGLRenderer({
   powerPreference: 'high-performance'
 });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight, false);
+// 注意：必须让 THREE 同步写入 canvas 的 CSS 宽高（updateStyle=true，默认值），
+// 否则 canvas 元素会用 attribute width/height（含 DPR 后的物理像素）作为 CSS 尺寸，
+// 导致 canvas 显示成 2 倍视口、机器人投影偏到右下 1/4。
+renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -352,7 +355,7 @@ function onResize() {
   const h = window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(w, h, false);
+  renderer.setSize(w, h);
   fitCameraToRobot();
 }
 window.addEventListener('resize', onResize);

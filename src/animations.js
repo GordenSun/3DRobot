@@ -183,52 +183,7 @@ function run(joints, t) {
   set(joints.rightElbow, 1.2 + Math.abs(Math.sin(tt + Math.PI)) * 0.2, 0, 0);
 }
 
-// 5. PUNCH 出拳（左右交替）
-function punch(joints, t) {
-  const cycle = (t * 2.2) % TAU;
-  const isLeft = cycle < Math.PI;
-  const local = isLeft ? cycle : cycle - Math.PI;
-  // 0→π 内：0→0.3 蓄力, 0.3→0.45 爆发, 0.45→1 收回
-  let phase;
-  if (local < 0.9) phase = local / 0.9 * 0.5; // 蓄力
-  else if (local < 1.4) phase = 0.5 + (local - 0.9) / 0.5 * 0.5; // 出拳
-  else phase = 1 - (local - 1.4) / (Math.PI - 1.4); // 收回
-
-  // 基础姿态
-  set(joints.chest, sin(t, 1.6) * 0.02, isLeft ? -0.25 : 0.25, 0);
-  set(joints.spine, 0, isLeft ? -0.15 : 0.15, 0);
-  set(joints.head, 0, isLeft ? -0.2 : 0.2, 0);
-
-  // 出拳的臂
-  if (isLeft) {
-    set(joints.leftShoulder, 0, 0, 0);
-    set(joints.leftUpperArm, -1.5 * phase, 0, 0.3 * (1 - phase));
-    set(joints.leftElbow, (1 - phase) * 1.6, 0, 0);
-    set(joints.leftForeArm, 0, 0, 0);
-    set(joints.leftHand, 0, 0, 0);
-    // 防守臂（右）抬起护脸
-    set(joints.rightUpperArm, -1.0, 0, -0.8);
-    set(joints.rightElbow, 1.6, 0, 0);
-  } else {
-    set(joints.rightShoulder, 0, 0, 0);
-    set(joints.rightUpperArm, -1.5 * phase, 0, -0.3 * (1 - phase));
-    set(joints.rightElbow, (1 - phase) * 1.6, 0, 0);
-    set(joints.rightForeArm, 0, 0, 0);
-    set(joints.rightHand, 0, 0, 0);
-    set(joints.leftUpperArm, -1.0, 0, 0.8);
-    set(joints.leftElbow, 1.6, 0, 0);
-  }
-
-  // 腿马步
-  set(joints.leftThigh, 0, 0, 0.15);
-  set(joints.rightThigh, 0, 0, -0.15);
-  set(joints.leftKnee, 0.35, 0, 0);
-  set(joints.rightKnee, 0.35, 0, 0);
-  set(joints.leftAnkle, -0.2, 0, 0);
-  set(joints.rightAnkle, -0.2, 0, 0);
-}
-
-// 6. JUMP 跳跃（蹲下→起跳→空中→落地）
+// 5. JUMP 跳跃（蹲下→起跳→空中→落地）
 function jump(joints, t) {
   const cycle = 1.6;
   const p = (t % cycle) / cycle; // 0..1
@@ -312,7 +267,6 @@ export const ANIMATIONS = {
   wave:  { label: 'WAVE',   cn: '挥手',   fn: wave },
   walk:  { label: 'WALK',   cn: '行走',   fn: walk },
   run:   { label: 'RUN',    cn: '奔跑',   fn: run  },
-  punch: { label: 'PUNCH',  cn: '出拳',   fn: punch},
   jump:  { label: 'JUMP',   cn: '跳跃',   fn: jump },
   dance: { label: 'DANCE',  cn: '舞蹈',   fn: dance}
 };
